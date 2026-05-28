@@ -8,7 +8,7 @@ PV-Trace is a full-stack drug safety platform that pulls live adverse event repo
 
 ## Live Demo
 
-[pv-trace.streamlit.app](https://pv-trace.streamlit.app)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://pv-trace.streamlit.app)
 
 ---
 
@@ -16,14 +16,14 @@ PV-Trace is a full-stack drug safety platform that pulls live adverse event repo
 
 Type a drug name. PV-Trace runs a 6-stage pipeline and surfaces everything a pharmacovigilance reviewer needs:
 
-| Stage | What happens |
+| Stage | What Happens |
 |---|---|
-| FAERS Ingestion | Pulls up to 500 live case reports from openFDA per query |
-| Signal Detection | Calculates PRR, ROR, EBGM, Chi² across all reported adverse events |
-| Clinical Explanation | AI-generated signal interpretation via Hugging Face flan-t5-base |
-| ICSR Narratives | Structured ICH E2D case narratives for each serious case |
-| Deadline Calculator | 7 / 15 / 90-day ICH E2A rules with 4-region comparison |
-| E2B Export | ICH E2B(R3)-style XML for case submissions |
+| **FAERS Ingestion** | Pulls up to 500 live case reports from openFDA per query |
+| **Signal Detection** | Calculates PRR, ROR, EBGM, Chi² across all reported adverse events |
+| **Clinical Explanation** | AI-generated signal interpretation via Hugging Face `flan-t5-base` |
+| **ICSR Narratives** | Structured ICH E2D case narratives for each serious case |
+| **Deadline Calculator** | 7 / 15 / 90-day ICH E2A rules with 4-region comparison |
+| **E2B Export** | ICH E2B(R3)-style XML for case submissions |
 
 Every run is logged to an append-only JSONL audit trail with SHA-256 narrative hashes.
 
@@ -43,14 +43,14 @@ ROR ≥ 2.0 is calculated as a supporting metric. Pairs below threshold are trac
 
 ## Regional Deadline Rules (ICH E2A)
 
-| Region | Fatal | Life-threatening | Serious | Non-serious |
+| Region | Fatal | Life-Threatening | Serious | Non-Serious |
 |---|---|---|---|---|
 | FDA (USA) | 7 days | 7 days | 15 days | 90 days |
 | EMA (Europe) | 7 days | 7 days | 15 days | 90 days |
 | CDSCO (India) | 7 days | 15 days | 15 days | 90 days |
 | WHO-UMC | 7 days | 7 days | 15 days | 90 days |
 
-CDSCO (Schedule Y) does not apply the 7-day rule to life-threatening cases separately — mapped to 15 days.
+> CDSCO (Schedule Y) does not apply the 7-day rule to life-threatening cases — mapped to 15 days.
 
 ---
 
@@ -96,28 +96,42 @@ Get it at [huggingface.co](https://huggingface.co) → Settings → Access Token
 
 ```
 pv-trace/
-├── app.py                        # Streamlit dashboard
-├── config/settings.py            # All config — thresholds, colors, API settings
+├── app.py                    # Streamlit dashboard (entry point)
+├── config/
+│   └── settings.py           # Thresholds, colors, API settings, regional rules
 ├── pipeline/
-│   ├── ingestor.py               # openFDA FAERS data ingestion
-│   ├── signal_detector.py        # PRR / ROR / EBGM / Chi² calculations
-│   ├── explainer.py              # HF Inference API clinical explainer
-│   ├── narrative_writer.py       # ICH E2D ICSR narrative generator
-│   ├── deadline_calculator.py    # ICH E2A regional deadline engine
-│   ├── e2b_exporter.py           # ICH E2B(R3) XML exporter
-│   └── ner_extractor.py          # Biomedical NER entity extractor
-├── audit/logger.py               # Append-only JSONL audit trail
+│   ├── ingestor.py           # openFDA FAERS data ingestion
+│   ├── signal_detector.py    # PRR / ROR / EBGM / Chi² calculations
+│   ├── explainer.py          # HF Inference API clinical explainer
+│   ├── narrative_writer.py   # ICH E2D ICSR narrative generator
+│   ├── deadline_calculator.py# ICH E2A regional deadline engine
+│   ├── e2b_exporter.py       # ICH E2B(R3) XML exporter
+│   └── ner_extractor.py      # Biomedical NER entity extractor
+├── audit/
+│   └── logger.py             # Append-only JSONL audit trail
 ├── utils/
-│   ├── formatters.py             # Display formatting helpers
-│   └── validators.py             # Input sanitisation
-└── tests/                        # 14 Pytest unit tests
+│   ├── formatters.py         # Display formatting helpers
+│   └── validators.py         # Input sanitisation
+├── tests/                    # 14 Pytest unit tests
+├── requirements.txt
+└── .env                      # HF_TOKEN (not committed)
 ```
+
+---
+
+## Running Tests
+
+```bash
+pytest
+```
+
+14 unit tests cover signal detection thresholds, deadline calculation logic, and FAERS ingestion behaviour.
 
 ---
 
 ## Regulatory Framework
 
-| Guideline | Applied in |
+| Guideline | Applied In |
 |---|---|
 | ICH E2A | Deadline calculator — expedited reporting windows |
 | ICH E2D | Narrative writer — ICSR structure |
