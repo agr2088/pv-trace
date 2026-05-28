@@ -88,7 +88,7 @@ Add your free Hugging Face token to `.env`:
 HF_TOKEN=hf_your_token_here
 ```
 
-Get it at [huggingface.co](https://huggingface.co) → Settings → Access Tokens → New token (read). No billing required.
+Get it at [huggingface.co](https://huggingface.co) → Settings → Access Tokens → New token (read).
 
 ---
 
