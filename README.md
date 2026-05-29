@@ -146,6 +146,6 @@ pytest
 
 ## About
 
-Built by **Aruri Gowtham** — Pharm.D, Data Science (CGPA 9.0), PvPI ADR pharmacovigilance experience.
+Built by **Aruri Gowtham** — Pharm.D, Data Science, PvPI ADR pharmacovigilance experience.
 
 Demonstrates full drug safety workflow knowledge: live data ingestion, disproportionality statistics, clinical NLP, multi-region regulatory timeline logic, submission-format XML export, and GxP-aligned audit trail design.
