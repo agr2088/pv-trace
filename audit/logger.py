@@ -60,6 +60,18 @@ class AuditLogger:
             {"case_id": case_id, "narrative_hash": narrative_hash},
         )
 
+    def log_prediction(self, drug_name: str, total_cases: int, predicted_signals: int) -> None:
+        """Log prediction batch summary for audit trail completeness."""
+        self.log_step(
+            "prediction",
+            "completed",
+            {
+                "drug_name": drug_name,
+                "total_cases": total_cases,
+                "predicted_signals": predicted_signals,
+            },
+        )
+
     def get_run_summary(self) -> dict:
         duration = (datetime.utcnow() - self.start_time).total_seconds()
         return {

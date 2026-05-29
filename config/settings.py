@@ -1,6 +1,7 @@
 """Central configuration for PV-Trace."""
 
 import os
+from pathlib import Path as _Path
 
 from dotenv import load_dotenv
 
@@ -39,7 +40,7 @@ SERIOUS_OUTCOMES = ["DE", "HO", "LT", "DS", "CA"]
 REGIONS = ["FDA (USA)", "EMA (Europe)", "CDSCO (India)"]
 
 # Audit log storage path.
-AUDIT_LOG_PATH = "audit/trace_log.jsonl"
+AUDIT_LOG_PATH = str(_Path(__file__).parent.parent / "audit" / "trace_log.jsonl")
 
 # OpenFDA fallback and export limits.
 FAERS_TOTAL_FALLBACK = 10000000

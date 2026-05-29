@@ -1,5 +1,5 @@
 .env
-audit/trace_log.jsonl
+audit/*.jsonl
 __pycache__/
 *.pyc
 .pytest_cache/

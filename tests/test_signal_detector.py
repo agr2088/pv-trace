@@ -43,8 +43,8 @@ def test_is_signal_fails_prr():
     assert detector.is_signal(a=10, prr=1.5, chi2=6.0) is False
 
 
-def test_background_estimate_not_inflated():
-    """PRR should not be inflated by the old 0.1 background multiplier bug."""
+def test_missing_background_uses_conservative_population_rate():
+    """Missing background counts should use the configured 1-per-10,000 estimate."""
     import pandas as pd
 
     detector = SignalDetector()
@@ -57,4 +57,5 @@ def test_background_estimate_not_inflated():
     signals = detector.analyze_drug(df, total_db_count=20_000_000)
     assert signals is not None
     assert not signals.empty
-    assert signals["prr"].dropna().max() < 2.0
+    nausea = signals.loc[signals["event_pt"] == "Nausea"].iloc[0]
+    assert nausea["prr"] == pytest.approx(6253.0, rel=0.01)

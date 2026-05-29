@@ -23,7 +23,15 @@ class DeadlineCalculator:
         self.non_serious_days = NON_SERIOUS_DAYS
 
     def get_deadline_days(self, outcome_code: str, serious: bool) -> int:
-        if outcome_code == "DE":
+        """Return ICH E2A reporting deadline days.
+
+        Fatal (DE) and life-threatening (LT) unexpected -> 7 days (ICH E2A §3.2)
+        Other serious unexpected (HO, DS, CA, OT) -> 15 days (ICH E2A §3.3)
+        Non-serious -> 90 days (ICH E2A §3.4)
+        """
+        from config.settings import FATAL_OUTCOME_CODES, LIFE_THREATENING_CODES
+
+        if outcome_code in FATAL_OUTCOME_CODES or outcome_code in LIFE_THREATENING_CODES:
             return self.fatal_days
         if serious:
             return self.serious_days
@@ -44,7 +52,7 @@ class DeadlineCalculator:
             "deadline_days": deadline_days,
             "deadline_date": deadline_date.strftime(ISO_DATE_FORMAT),
             "days_remaining": days_remaining,
-            "status": status,
+            "deadline_status": status,
             "rule_reference": self._rule_reference(deadline_days),
         }
 
@@ -61,7 +69,6 @@ class DeadlineCalculator:
             axis=1,
         )
         deadline_df = pd.DataFrame(deadline_rows.tolist())
-        deadline_df = deadline_df.rename(columns={"status": "deadline_status"})
         return pd.concat([output.reset_index(drop=True), deadline_df.reset_index(drop=True)], axis=1)
 
     def get_regional_deadlines(self, outcome_code: str, serious: bool) -> list[dict]:
@@ -112,4 +119,9 @@ class DeadlineCalculator:
 
     @staticmethod
     def _rule_reference(deadline_days: int) -> str:
-        return f"ICH E2A - {deadline_days}-day rule"
+        references = {
+            7: "ICH E2A §3.2 - Fatal/Life-threatening (7-day rule)",
+            15: "ICH E2A §3.3 - Serious unexpected (15-day rule)",
+            90: "ICH E2A §3.4 - Non-serious (90-day rule)",
+        }
+        return references.get(deadline_days, f"ICH E2A - {deadline_days}-day rule")

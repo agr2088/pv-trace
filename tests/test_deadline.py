@@ -13,6 +13,20 @@ def test_serious_deadline_uses_fifteen_day_rule():
     assert calculator.get_deadline_days("HO", True) == 15
 
 
+def test_life_threatening_deadline_uses_seven_day_rule():
+    """ICH E2A §3.2: life-threatening unexpected reactions -> 7-day expedited reporting."""
+    calculator = DeadlineCalculator()
+    assert calculator.get_deadline_days("LT", True) == 7, (
+        "Life-threatening cases must use the 7-day ICH E2A rule, not the 15-day serious rule."
+    )
+
+
+def test_congenital_anomaly_uses_fifteen_day_rule():
+    """ICH E2A §3.3: congenital anomaly -> 15-day serious unexpected reporting."""
+    calculator = DeadlineCalculator()
+    assert calculator.get_deadline_days("CA", True) == 15
+
+
 def test_non_serious_deadline_uses_ninety_day_rule():
     calculator = DeadlineCalculator()
     assert calculator.get_deadline_days("OT", False) == 90
@@ -23,7 +37,7 @@ def test_calculate_deadline_parses_yyyymmdd():
     received = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
     result = calculator.calculate_deadline(received, "DE", True)
     assert result["deadline_days"] == 7
-    assert result["rule_reference"] == "ICH E2A - 7-day rule"
+    assert result["rule_reference"] == "ICH E2A §3.2 - Fatal/Life-threatening (7-day rule)"
 
 
 def test_regional_life_threatening_rules_differentiate_cdsco():

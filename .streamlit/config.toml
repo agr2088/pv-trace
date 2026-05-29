@@ -1,3 +1,2 @@
-[server]
-port = 8502
-
+[theme]
+base = "dark"

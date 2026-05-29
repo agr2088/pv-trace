@@ -12,8 +12,28 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from audit.logger import AuditLogger
-from config.settings import *
-from config.settings import CHI2_THRESHOLD, MIN_CASE_COUNT, PRR_THRESHOLD, ROR_THRESHOLD
+from config.settings import (
+    APP_NAME,
+    APP_PAGE_TITLE,
+    APP_SUBTITLE,
+    AUDIT_DISPLAY_LIMIT,
+    AUDIT_LOG_PATH,
+    CACHE_TTL_SECONDS,
+    CHI2_THRESHOLD,
+    COLOR_BORDER,
+    COLOR_CARD,
+    COLOR_DANGER,
+    COLOR_MUTED,
+    COLOR_PRIMARY,
+    COLOR_SIDEBAR,
+    COLOR_TEXT,
+    E2B_BATCH_LIMIT,
+    EXAMPLE_DRUGS,
+    MIN_CASE_COUNT,
+    NARRATIVE_DISPLAY_LIMIT,
+    PRR_THRESHOLD,
+    ROR_THRESHOLD,
+)
 from pipeline.deadline_calculator import DeadlineCalculator
 from pipeline.e2b_exporter import E2BExporter
 from pipeline.explainer import ClinicalExplainer
@@ -27,7 +47,7 @@ from utils.validators import InputValidator
 
 st.set_page_config(
     page_title=APP_PAGE_TITLE,
-    page_icon="PV",
+    page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -300,7 +320,7 @@ def render_landing():
     st.caption("Quick examples")
     example_cols = st.columns(len(EXAMPLE_DRUGS))
     for col, drug in zip(example_cols, EXAMPLE_DRUGS):
-        col.button(drug, width="stretch", on_click=trigger_analysis, args=(drug,))
+        col.button(drug, use_container_width=True, on_click=trigger_analysis, args=(drug,))
 
     st.write("")
     st.markdown(
@@ -340,7 +360,7 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
     table = formatter.dataframe_to_display(display_df, ["Event", "Cases", "PRR", "ROR", "EBGM", "Chi2", "Signal"])
     st.dataframe(
         table,
-        width="stretch",
+        use_container_width=True,
         hide_index=True,
         column_config={
             "Cases": st.column_config.NumberColumn("Cases", format="%d 📄"),
@@ -349,6 +369,18 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
             "Signal": st.column_config.TextColumn("Signal Status"),
         },
     )
+    if signals_df.empty:
+        st.info(
+            "No adverse event terms were found in the FAERS data for this drug. "
+            "This may indicate low report volume, a brand name vs. generic mismatch, "
+            "or that the drug has very few spontaneous reports. Try the generic INN name."
+        )
+    elif signal_count == 0:
+        st.success(
+            f"No signals meeting WHO-UMC criteria (PRR >= {PRR_THRESHOLD}, Chi2 >= {CHI2_THRESHOLD}, "
+            f"n >= {MIN_CASE_COUNT}) were detected for this drug across {len(signals_df)} adverse event terms. "
+            "Continue routine pharmacovigilance monitoring per standard practice."
+        )
     st.download_button(
         "Download signal CSV",
         signals_df.to_csv(index=False).encode("utf-8"),
@@ -380,7 +412,7 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
                 height=400,
                 showlegend=True,
             )
-            st.plotly_chart(fig_prr, width="stretch")
+            st.plotly_chart(fig_prr, use_container_width=True)
 
         with chart_col2:
             scatter_df = signals_df.dropna(subset=["prr", "ror"]).head(30)
@@ -407,12 +439,12 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
                 marker=dict(line=dict(width=1, color="#1f2937")),
                 hovertemplate="<b>%{hovertext}</b><br><br>PRR Score: %{x:.2f}<br>ROR Score: %{y:.2f}<br>Case Count: %{marker.size}<extra></extra>",
             )
-            st.plotly_chart(fig_scatter, width="stretch")
+            st.plotly_chart(fig_scatter, use_container_width=True)
 
 
 def render_clinical_tab(results: dict):
     signals = results["signals_df"]
-    detected = signals[signals["is_signal"] == True] if not signals.empty else pd.DataFrame()
+    detected = signals[signals["is_signal"].astype(bool)] if not signals.empty else pd.DataFrame()
     if detected.empty:
         st.info("No signals meeting WHO-UMC criteria detected")
         return
@@ -428,7 +460,19 @@ def render_clinical_tab(results: dict):
 
 def render_narrative_tab(results: dict):
     writer = NarrativeWriter()
-    narratives = results["narratives"][:NARRATIVE_DISPLAY_LIMIT]
+    all_narratives = results["narratives"]
+    serious_narratives = [n for n in all_narratives if n.get("serious")]
+    non_serious = [n for n in all_narratives if not n.get("serious")]
+    narratives = (serious_narratives + non_serious)[:NARRATIVE_DISPLAY_LIMIT]
+
+    col_a, col_b = st.columns(2)
+    col_a.metric("Total narratives generated", len(all_narratives))
+    col_b.metric("Serious cases (priority review)", len(serious_narratives))
+    if len(all_narratives) > NARRATIVE_DISPLAY_LIMIT:
+        st.caption(
+            f"Showing {NARRATIVE_DISPLAY_LIMIT} of {len(all_narratives)} narratives "
+            f"(serious cases shown first). Download ZIP for all."
+        )
     for index, item in enumerate(narratives):
         with st.expander(f"Case {item['case_id']}"):
             st.code(writer.format_for_display(item["narrative"]), language="text")
@@ -437,7 +481,7 @@ def render_narrative_tab(results: dict):
                 item["narrative"].encode("utf-8"),
                 file_name=f"case_{item['case_id'] or index + 1}.txt",
                 mime="text/plain",
-                key=f"narrative_{index}_{item['case_id'] or 'unknown'}",
+                key=f"narrative_dl_{index}",
             )
     if narratives:
         st.download_button(
@@ -465,9 +509,14 @@ def render_deadline_tab(results: dict, formatter: OutputFormatter):
             "rule_reference",
         ],
     )
+    if "days_remaining" in display.columns:
+        display = display.copy()
+        display["days_remaining"] = display["days_remaining"].apply(
+            lambda x: max(0, min(int(x), 90)) if isinstance(x, (int, float)) and not pd.isna(x) else 0
+        )
     st.dataframe(
         display,
-        width="stretch",
+        use_container_width=True,
         hide_index=True,
         column_config={
             "days_remaining": st.column_config.ProgressColumn(
@@ -477,15 +526,27 @@ def render_deadline_tab(results: dict, formatter: OutputFormatter):
                 min_value=0,
                 max_value=90,
             ),
-            "deadline_status": st.column_config.TextColumn("Status"),
+            "deadline_status": st.column_config.TextColumn(
+                "Status",
+                help="OVERDUE = past deadline | DUE SOON = <=3 days | ON TRACK = >3 days remaining",
+            ),
             "receive_date": st.column_config.DateColumn("Receive Date"),
             "deadline_date": st.column_config.DateColumn("Deadline"),
         },
     )
     if not deadlines_df.empty:
-        first = deadlines_df.iloc[0]
-        regional = DeadlineCalculator().get_regional_deadlines(first.get("outcome_code", ""), bool(first.get("serious", False)))
-        st.dataframe(pd.DataFrame(regional), width="stretch", hide_index=True)
+        priority = {code: i for i, code in enumerate(["DE", "LT", "HO", "DS", "CA", "OT"])}
+        worst_row = deadlines_df.copy()
+        worst_row["_priority"] = worst_row["outcome_code"].map(lambda c: priority.get(c, 99))
+        worst = worst_row.sort_values("_priority").iloc[0]
+        st.caption(
+            "Regional comparison based on worst-case outcome in batch: "
+            f"**{worst.get('outcome_label', worst.get('outcome_code', 'Unknown'))}**"
+        )
+        regional = DeadlineCalculator().get_regional_deadlines(
+            worst.get("outcome_code", ""), bool(worst.get("serious", False))
+        )
+        st.dataframe(pd.DataFrame(regional), use_container_width=True, hide_index=True)
     st.download_button(
         "Download deadline CSV",
         deadlines_df.to_csv(index=False).encode("utf-8"),
@@ -502,24 +563,29 @@ def render_ner_tab():
     st.subheader("Free-Text Clinical NER")
     st.caption("Paste any clinical note, adverse event description, or ICSR text. Entities will be extracted using spaCy NLP.")
 
-    sample = (
+    SAMPLE_TEXT = (
         "A 54-year-old male patient was prescribed warfarin 5mg daily for atrial fibrillation. "
         "After 3 weeks he developed severe gastrointestinal haemorrhage and was hospitalised. "
         "Liver enzymes were elevated. Warfarin was discontinued and outcome was recovery."
     )
 
+    if "ner_text" not in st.session_state:
+        st.session_state.ner_text = ""
+
+    if st.button("Use sample text"):
+        st.session_state.ner_text = SAMPLE_TEXT
+        st.session_state.ner_text_area = SAMPLE_TEXT
+        st.rerun()
+
     text_input = st.text_area(
         "Clinical text input",
-        placeholder=sample,
+        value=st.session_state.ner_text,
         height=160,
         help="Supports clinical notes, adverse event narratives, or any medical free text.",
+        key="ner_text_area",
     )
 
-    use_sample = st.button("Use sample text")
-    if use_sample:
-        text_input = sample
-
-    if st.button("Extract Entities", type="primary") or use_sample:
+    if st.button("Extract Entities", type="primary"):
         if not text_input or not text_input.strip():
             st.warning("Please enter some clinical text.")
             return
@@ -596,7 +662,7 @@ def render_e2b_tab(results: dict):
                 item["xml"].encode("utf-8"),
                 file_name=f"e2b_case_{case_id}.xml",
                 mime="application/xml",
-                key=f"e2b_{index}_{case_id}",
+                key=f"e2b_dl_{index}",
             )
 
 
@@ -607,7 +673,7 @@ def render_audit_tab(results: dict):
     if entries.empty:
         st.info("No audit entries recorded yet")
     else:
-        st.dataframe(entries, width="stretch", hide_index=True)
+        st.dataframe(entries, use_container_width=True, hide_index=True)
     path = Path(AUDIT_LOG_PATH)
     if path.exists():
         st.download_button("Download audit JSONL", path.read_bytes(), file_name="trace_log.jsonl", mime="application/jsonl")
@@ -620,6 +686,14 @@ def main():
 
     st.sidebar.markdown(f"## {APP_NAME}")
     st.sidebar.caption(APP_SUBTITLE)
+    st.sidebar.warning(
+        "**Clinical Decision Support Only**\n\n"
+        "PV-Trace outputs are generated from FAERS voluntary reports and are **not** "
+        "a substitute for qualified pharmacovigilance physician review. All signals, "
+        "narratives, and E2B exports require medical review before regulatory submission. "
+        "FAERS data reflects reports, not confirmed causality.",
+        icon=None,
+    )
     st.sidebar.divider()
 
     with st.sidebar.form(key="drug_search_form"):
@@ -628,7 +702,7 @@ def main():
             key="drug_input",
             placeholder="e.g. ibuprofen, warfarin",
         )
-        analyze = st.form_submit_button("Analyze Drug", type="primary", width="stretch")
+        analyze = st.form_submit_button("Analyze Drug", type="primary", use_container_width=True)
 
     st.sidebar.divider()
     st.sidebar.markdown(
@@ -674,8 +748,7 @@ ICH E2B(R3) XML export
         else:
             clean_drug = validator.sanitize_drug_name(drug_name)
             try:
-                with st.spinner(f"Running PV-Trace pipeline for {clean_drug}..."):
-                    results = run_pipeline(clean_drug)
+                results = run_pipeline(clean_drug)
                 if results["events_df"].empty:
                     st.warning(f"No cases found for {clean_drug} in FAERS")
                 st.session_state.results = results

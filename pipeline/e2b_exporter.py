@@ -21,6 +21,9 @@ class E2BExporter:
         ET.SubElement(report, "primarysourcecountry").text = str(case.get("reporter_country", "Unknown"))
         ET.SubElement(report, "receivedate").text = str(case.get("receive_date", ""))
         ET.SubElement(report, "serious").text = "1" if bool(case.get("serious", False)) else "2"
+        narrative_text = str(case.get("narrative", "")).strip()
+        if narrative_text:
+            ET.SubElement(report, "narrativeincludeclinical").text = narrative_text
 
         patient = ET.SubElement(report, "patient")
         age_raw = str(case.get("age", ""))
@@ -38,8 +41,6 @@ class E2BExporter:
         reaction = ET.SubElement(patient, "reaction")
         ET.SubElement(reaction, "reactionmeddrapt").text = str(case.get("event_pt", ""))
         ET.SubElement(reaction, "reactionoutcome").text = str(case.get("outcome_code", ""))
-        summary = ET.SubElement(patient, "summary")
-        ET.SubElement(summary, "narrativeincludeclinical").text = str(case.get("narrative", ""))
 
         ET.indent(root, space="  ")
         xml_body = ET.tostring(root, encoding="unicode")

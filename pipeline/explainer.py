@@ -49,7 +49,11 @@ class ClinicalExplainer:
             if response.status_code == 200:
                 data = response.json()
                 if isinstance(data, list) and data:
-                    return str(data[0].get("generated_text", "")).strip()
+                    raw = str(data[0].get("generated_text", "")).strip()
+                    # flan-t5 often echoes the prompt; strip the instruction prefix.
+                    if "Classification:" in raw:
+                        raw = raw.split("Classification:")[-1].strip()
+                    return raw if len(raw) > 20 else None
         except Exception:
             pass
         return None

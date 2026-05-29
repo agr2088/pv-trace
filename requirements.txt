@@ -1,39 +1,13 @@
-# PV-Trace — Python dependencies
-# Install with: pip install -r requirements.txt
-
-# Dashboard
 streamlit>=1.32.0
-
-# Data & statistics
 pandas>=2.0.0
 numpy>=1.24.0
-scipy>=1.11.0
-
-# Visualisation
-plotly>=5.18.0
-
-# HTTP client (openFDA + HuggingFace)
 requests>=2.31.0
-
-# Environment config
+pytest>=7.4.0
 python-dotenv>=1.0.0
-
-# NLP / NER
+scipy>=1.11.0
+plotly>=5.18.0
+lxml>=5.1.0
 spacy>=3.7.0
 scispacy>=0.5.4
-
-# AI explainer (HuggingFace Inference API)
-transformers>=4.40.0
-huggingface_hub>=0.22.0
-
-# Deep learning backend (CPU build — swap for cu118/cu121 on GPU)
-torch>=2.0.0
-
-# XML parsing (E2B export)
-lxml>=5.1.0
-
-# Testing
-pytest>=7.4.0
-
-# scispaCy biomedical model (downloaded directly)
 https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_core_sci_sm-0.5.4.tar.gz
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl

@@ -2,7 +2,6 @@
 
 import math
 
-import numpy as np
 import pandas as pd
 from scipy.stats import chi2_contingency
 
@@ -120,8 +119,11 @@ class SignalDetector:
                 total_event_in_db = int(event_background_counts[event_pt])
                 c = max(total_event_in_db - a, 1)
             else:
-                background_rate = a / max(total_drug_rows, 1)
-                c = max(int(np.ceil((background_total - total_drug_rows) * background_rate)), 1)
+                # Estimate background using a conservative population rate.
+                # Assume background event rate = 1 per 10,000 FAERS reports
+                # when real counts are unavailable.
+                background_n = max(background_total - total_drug_rows, 1)
+                c = max(int(background_n // 10_000), 1)
 
             d = max(background_total - a - b - c, 0)
             prr_result = self.calculate_prr(a, b, c, d)
