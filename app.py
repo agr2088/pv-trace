@@ -424,18 +424,39 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
 
 
 def render_clinical_tab(results: dict):
+    from config.settings import HF_TOKEN
+
     signals = results["signals_df"]
     detected = signals[signals["is_signal"].astype(bool)] if not signals.empty else pd.DataFrame()
+
+    st.markdown(
+        '<div class="station-label">Station II — Decode: Signal-to-Plain-Language</div>',
+        unsafe_allow_html=True,
+    )
+
     if detected.empty:
-        st.info("No signals meeting WHO-UMC criteria detected")
+        st.markdown(empty_station_shell("No signal acquired"), unsafe_allow_html=True)
         return
+
+    is_template = not bool(HF_TOKEN)
+
     for _, row in detected.iterrows():
+        raw_text = (
+            f"PRR = {row['prr']:.2f} (95% CI: {row['prr_lower']:.2f}–{row['prr_upper']:.2f})<br>"
+            f"Cases: {int(row['case_count'])} &middot; "
+            f"Event: <strong>{row['event_pt']}</strong>"
+        )
         st.markdown(
-            f"<div class='pv-card'><h3>{row['event_pt']}</h3>"
-            f"<span class='badge badge-signal'>PRR {row['prr']:.2f}</span><p>{row['explanation']}</p></div>",
+            decode_strip_html(
+                raw_label="RAW SIGNAL",
+                raw_text=raw_text,
+                explained_text=row["explanation"],
+                is_template=is_template,
+            ),
             unsafe_allow_html=True,
         )
-        with st.expander("Full stats"):
+
+        with st.expander("Full statistics"):
             st.json(row[["case_count", "prr", "ror", "ebgm", "chi2", "is_signal"]].to_dict())
 
 
@@ -446,24 +467,42 @@ def render_narrative_tab(results: dict):
     non_serious = [n for n in all_narratives if not n.get("serious")]
     narratives = (serious_narratives + non_serious)[:NARRATIVE_DISPLAY_LIMIT]
 
+    st.markdown(
+        '<div class="station-label">Station III — Transcript: ICSR Narratives</div>',
+        unsafe_allow_html=True,
+    )
+
+    if not narratives:
+        st.markdown(empty_station_shell("No signal acquired"), unsafe_allow_html=True)
+        return
+
     col_a, col_b = st.columns(2)
-    col_a.metric("Total narratives generated", len(all_narratives))
-    col_b.metric("Serious cases (priority review)", len(serious_narratives))
+    col_a.metric("Total narratives", len(all_narratives))
+    col_b.metric("Serious (priority)", len(serious_narratives))
+
     if len(all_narratives) > NARRATIVE_DISPLAY_LIMIT:
-        st.caption(
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:{STATIC_FOG};padding:0.2rem 0;">'
             f"Showing {NARRATIVE_DISPLAY_LIMIT} of {len(all_narratives)} narratives "
-            f"(serious cases shown first). Download ZIP for all."
+            f"(serious cases shown first). Download ZIP for all.</div>",
+            unsafe_allow_html=True,
         )
+
     for index, item in enumerate(narratives):
-        with st.expander(f"Case {item['case_id']}"):
-            st.code(writer.format_for_display(item["narrative"]), language="text")
-            st.download_button(
-                "Download narrative",
-                item["narrative"].encode("utf-8"),
-                file_name=f"case_{item['case_id'] or index + 1}.txt",
-                mime="text/plain",
-                key=f"narrative_dl_{index}",
-            )
+        meta = f"Drug: {results['events_df'].iloc[0]['drug_name'] if not results['events_df'].empty else 'N/A'}"
+        st.markdown(
+            transcript_frame(item["case_id"], meta, writer.format_for_display(item["narrative"])),
+            unsafe_allow_html=True,
+        )
+        st.download_button(
+            "Download narrative",
+            item["narrative"].encode("utf-8"),
+            file_name=f"case_{item['case_id'] or index + 1}.txt",
+            mime="text/plain",
+            key=f"narrative_dl_{index}",
+        )
+        st.write("")
+
     if narratives:
         st.download_button(
             "Download all narratives ZIP",
@@ -474,25 +513,53 @@ def render_narrative_tab(results: dict):
 
 
 def render_deadline_tab(results: dict, formatter: OutputFormatter):
-    st.subheader(f"Deadline status as of {pd.Timestamp.today().date()}")
-    st.info(
-        "**All 7-day and 15-day deadlines assume the reported reaction is unexpected per ICH E2A.** "
-        "FAERS/openFDA does not contain product labeling data needed to verify listedness. "
-        "Confirm expectedness against approved product labeling before regulatory submission."
-    )
     deadlines_df = results["deadlines_df"]
+
+    st.markdown(
+        '<div class="station-label">Station IV — Countdown: Reporting Deadlines</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(expectedness_banner(), unsafe_allow_html=True)
+
+    if deadlines_df.empty:
+        st.markdown(empty_station_shell("No signal acquired"), unsafe_allow_html=True)
+        return
+
+    st.metric("Deadline status", f"as of {pd.Timestamp.today().date()}")
+
+    from dashboard.theme import countdown_gauge
+
+    max_total = int(deadlines_df["deadline_days"].max()) if "deadline_days" in deadlines_df.columns else 90
+    gauge_rows = deadlines_df.head(12)
+    n_gauges = len(gauge_rows)
+    cols_per_row = min(n_gauges, 4)
+
+    for start in range(0, n_gauges, cols_per_row):
+        row_items = gauge_rows.iloc[start:start + cols_per_row]
+        cols = st.columns(cols_per_row)
+        for col, (_, row) in zip(cols, row_items.iterrows()):
+            case_id = str(row.get("primaryid", "?"))
+            event = str(row.get("event_pt", "?"))[:25]
+            days_rem = int(row.get("days_remaining", 0))
+            deadline_d = int(row.get("deadline_days", 90))
+            fig = countdown_gauge(days_rem, deadline_d, case_id)
+            with col:
+                st.plotly_chart(fig, use_container_width=True)
+                st.markdown(
+                    f'<div style="text-align:center;font-family:\'{FONT_MONO}\',monospace;'
+                    f'font-size:0.7rem;color:{STATIC_FOG};">'
+                    f'{case_id}<br>{event}</div>',
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown('<div class="station-label" style="margin-top:1rem;">Deadline Detail</div>',
+                unsafe_allow_html=True)
     display = formatter.dataframe_to_display(
         deadlines_df,
         [
-            "primaryid",
-            "event_pt",
-            "outcome_label",
-            "receive_date",
-            "deadline_days",
-            "deadline_date",
-            "days_remaining",
-            "deadline_status",
-            "rule_reference",
+            "primaryid", "event_pt", "outcome_label", "receive_date",
+            "deadline_days", "deadline_date", "days_remaining",
+            "deadline_status", "rule_reference",
         ],
     )
     if "days_remaining" in display.columns:
@@ -506,33 +573,30 @@ def render_deadline_tab(results: dict, formatter: OutputFormatter):
         hide_index=True,
         column_config={
             "days_remaining": st.column_config.ProgressColumn(
-                "Days Remaining",
-                help="Days until regulatory reporting deadline",
-                format="%d days",
-                min_value=0,
-                max_value=90,
+                "Days Remaining", format="%d days", min_value=0, max_value=90,
             ),
-            "deadline_status": st.column_config.TextColumn(
-                "Status",
-                help="OVERDUE = past deadline | DUE SOON = <=3 days | ON TRACK = >3 days remaining",
-            ),
+            "deadline_status": st.column_config.TextColumn("Status"),
             "receive_date": st.column_config.DateColumn("Receive Date"),
             "deadline_date": st.column_config.DateColumn("Deadline"),
         },
     )
+
     if not deadlines_df.empty:
-        priority = {code: i for i, code in enumerate(["DE", "LT", "HO", "DS", "CA", "OT"])}
+        priority = {code: i for i, code in enumerate(["DE", "LT", "HO", "DS", "CA", "OT", "RI"])}
         worst_row = deadlines_df.copy()
         worst_row["_priority"] = worst_row["outcome_code"].map(lambda c: priority.get(c, 99))
         worst = worst_row.sort_values("_priority").iloc[0]
-        st.caption(
-            "Regional comparison based on worst-case outcome in batch: "
-            f"**{worst.get('outcome_label', worst.get('outcome_code', 'Unknown'))}**"
+        st.markdown(
+            f'<div style="font-size:0.78rem;color:{STATIC_FOG};padding:0.3rem 0;">'
+            f'Regional comparison — worst outcome: '
+            f'<strong>{worst.get("outcome_label", worst.get("outcome_code", "Unknown"))}</strong></div>',
+            unsafe_allow_html=True,
         )
         regional = DeadlineCalculator().get_regional_deadlines(
             worst.get("outcome_code", ""), bool(worst.get("serious", False))
         )
         st.dataframe(pd.DataFrame(regional), use_container_width=True, hide_index=True)
+
     st.download_button(
         "Download deadline CSV",
         deadlines_df.to_csv(index=False).encode("utf-8"),
@@ -546,8 +610,16 @@ def render_ner_tab():
         st.session_state.drug_input = selected_drug
         st.session_state.run_requested = True
 
-    st.subheader("Free-Text Clinical NER")
-    st.caption("Paste any clinical note, adverse event description, or ICSR text. Entities will be extracted using spaCy NLP.")
+    st.markdown(
+        '<div class="station-label">Station VI — Decoder: Free-Text Clinical NER</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div style="font-size:0.78rem;color:{STATIC_FOG};padding:0.2rem 0 0.5rem 0;">'
+        f"Paste any clinical note, adverse event description, or ICSR text. "
+        f"Entities extracted using spaCy NLP.</div>",
+        unsafe_allow_html=True,
+    )
 
     SAMPLE_TEXT = (
         "A 54-year-old male patient was prescribed warfarin 5mg daily for atrial fibrillation. "
@@ -576,98 +648,195 @@ def render_ner_tab():
             st.warning("Please enter some clinical text.")
             return
 
-        with st.status("Running spaCy NER pipeline...", expanded=True) as status:
-            status.write("Loading spaCy model and tokenizer...")
+        with st.status("Running NER pipeline...", expanded=True) as status:
+            status.write("Loading model and tokenizer...")
             extractor = NERExtractor()
-            status.write("Extracting drugs, adverse event terms, demographics, and SOC matches...")
+            status.write("Extracting drugs, AE terms, demographics, and SOC matches...")
             result = extractor.extract_entities(text_input)
-            status.update(label="NER extraction complete", state="complete", expanded=False)
+            status.update(label="Extraction complete", state="complete", expanded=False)
+
+        st.markdown(
+            extraction_mode_badge(result.get("ae_extraction_mode", ""), result.get("model_used", "")),
+            unsafe_allow_html=True,
+        )
 
         col1, col2, col3 = st.columns(3)
-        col1.metric("Drugs identified", len(result["drugs"]))
-        col2.metric("AE terms extracted", len(result["ae_terms"]))
-        col3.metric("SOC classifications", len(result["soc_classifications"]))
+        col1.metric("Drugs", len(result["drugs"]))
+        col2.metric("AE terms", len(result["ae_terms"]))
+        col3.metric("SOC classes", len(result["soc_classifications"]))
 
-        st.write("")
         c1, c2 = st.columns(2)
 
         with c1:
-            st.markdown("**Identified Drug Names**")
+            st.markdown(
+                f'<div class="station-label">Identified Drug Names</div>',
+                unsafe_allow_html=True,
+            )
             if result["drugs"]:
                 for drug in result["drugs"]:
-                    st.markdown(f"<span class='badge badge-monitor'>Drug: {drug}</span>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<span class='status-badge badge-signal'>Drug: {drug}</span>",
+                        unsafe_allow_html=True,
+                    )
                 suggested = result["drugs"][0]
-                st.button(f"Search FAERS for '{suggested}'", on_click=trigger_analysis, args=(suggested,))
+                st.button(
+                    f"Search FAERS for '{suggested}'",
+                    on_click=trigger_analysis,
+                    args=(suggested,),
+                )
             else:
                 st.info("No drug names detected")
 
         with c2:
-            st.markdown("**Adverse Event Terms**")
+            st.markdown(
+                f'<div class="station-label">Adverse Event Terms</div>',
+                unsafe_allow_html=True,
+            )
             if result["ae_terms"]:
                 for ae_term in result["ae_terms"][:10]:
-                    st.markdown(f"<span class='badge badge-signal'>AE: {ae_term}</span>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<span class='status-badge badge-borderline'>AE: {ae_term}</span>",
+                        unsafe_allow_html=True,
+                    )
             else:
                 st.info("No AE terms detected")
 
-        st.write("")
-        st.markdown("**System-Organ Class Classifications**")
+        st.markdown(
+            f'<div class="station-label" style="margin-top:0.5rem;">SOC Classifications</div>',
+            unsafe_allow_html=True,
+        )
         if result["soc_classifications"]:
             for hit in result["soc_classifications"]:
                 terms = ", ".join(hit["matched_terms"])
                 st.markdown(
-                    f"<div class='pv-card'><strong>{hit['soc'].title()}</strong> - matched: {terms}</div>",
+                    f"<div class='station-panel'><strong>{hit['soc'].title()}</strong> "
+                    f"- matched: {terms}</div>",
                     unsafe_allow_html=True,
                 )
         else:
             st.info("No SOC patterns matched")
 
         if result.get("demographics"):
-            st.markdown("**Extracted Demographics**")
+            st.markdown(
+                f'<div class="station-label" style="margin-top:0.5rem;">Demographics</div>',
+                unsafe_allow_html=True,
+            )
             st.json(result["demographics"])
 
 
 def render_e2b_tab(results: dict):
     exports = results["e2b_exports"]
+
     st.markdown(
-        "<div class='pv-card'><strong>ICH E2B(R3) XML Export</strong>"
-        "<p>Each export contains a structured XML case safety report for portfolio demonstration. "
-        "Additional sender, receiver, indication, and time-to-onset fields are required before regulatory submission.</p>"
-        "</div>",
+        '<div class="station-label">Station V — Packet: E2B(R3) XML Export</div>',
         unsafe_allow_html=True,
     )
-    st.caption(
-        "Per-reaction recovery status is taken directly from the openFDA `reactionoutcome` field when available. "
-        "Where absent from the source report, outcomes default to 'unknown' (code 6). "
-        "Patient age is parsed from the FAERS formatted string; verify against source data before submission."
-    )
+
     if not exports:
-        st.info("No E2B exports generated.")
+        st.markdown(empty_station_shell("No signal acquired"), unsafe_allow_html=True)
         return
+
     st.metric("Cases exported", len(exports))
+
     for index, item in enumerate(exports):
         case_id = item.get("case_id") or f"UNKNOWN-{index + 1}"
-        with st.expander(f"Case {case_id} - XML"):
-            st.code(item["xml"], language="xml")
-            st.download_button(
-                "Download XML",
-                item["xml"].encode("utf-8"),
-                file_name=f"e2b_case_{case_id}.xml",
-                mime="application/xml",
-                key=f"e2b_dl_{index}",
-            )
+        xml_text = item.get("xml", "")
+
+        segments = ["Patient", "Drug", "Reaction", "Outcome", "Sender"]
+        seg_cols = st.columns(len(segments))
+        active_seg = f"active_seg_{index}"
+        if active_seg not in st.session_state:
+            st.session_state[active_seg] = None
+
+        for i, (seg_label, seg_col) in enumerate(zip(segments, seg_cols)):
+            with seg_col:
+                is_active = st.session_state[active_seg] == seg_label
+                if st.button(
+                    seg_label,
+                    key=f"seg_{index}_{seg_label}",
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary",
+                ):
+                    st.session_state[active_seg] = (
+                        None if st.session_state[active_seg] == seg_label else seg_label
+                    )
+                    st.rerun()
+
+        if st.session_state[active_seg]:
+            st.markdown(reactionoutcome_disclosure(), unsafe_allow_html=True)
+
+        if xml_text:
+            with st.expander(f"Case {case_id} — Full XML"):
+                st.code(xml_text, language="xml")
+                st.download_button(
+                    "Download XML",
+                    xml_text.encode("utf-8"),
+                    file_name=f"e2b_case_{case_id}.xml",
+                    mime="application/xml",
+                    key=f"e2b_dl_{index}",
+                )
 
 
 def render_audit_tab(results: dict):
-    st.subheader("Current run")
+    from audit.logger import AuditLogger as _AL
+
+    st.markdown(
+        '<div class="station-label">Station VII — Flight Recorder: Audit Trail</div>',
+        unsafe_allow_html=True,
+    )
+
+    chain = _AL.verify_chain()
+    if chain["valid"]:
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:8px;padding:0.3rem 0;">'
+            f'{status_led(True)}'
+            f'<span style="font-family:\'{FONT_MONO}\',monospace;font-size:0.8rem;'
+            f'color:{PHOSPHOR};">Chain verified &mdash; {chain["entries"]} entries intact</span></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:8px;padding:0.3rem 0;">'
+            f'{status_led(False, blinking=True)}'
+            f'<span style="font-family:\'{FONT_MONO}\',monospace;font-size:0.8rem;'
+            f'color:{ALERT_CRIMSON};">Chain BROKEN at entry #{chain["broken_at"]} &mdash; '
+            f'tamper detected</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(f'<div class="station-label" style="margin-top:0.5rem;">Current Run</div>',
+                unsafe_allow_html=True)
     st.json(results["run_summary"])
+
     entries = load_audit_entries()
     if entries.empty:
-        st.info("No audit entries recorded yet")
-    else:
-        st.dataframe(entries, use_container_width=True, hide_index=True)
+        st.markdown(empty_station_shell("No audit entries recorded yet"), unsafe_allow_html=True)
+        return
+
+    st.markdown(f'<div class="station-label" style="margin-top:0.5rem;">Flight Recorder Tape</div>',
+                unsafe_allow_html=True)
+
+    tiles_html = '<div class="tape-strip">'
+    break_at = chain.get("broken_at")
+    for i, (_, row) in enumerate(entries.iterrows()):
+        entry_dict = row.to_dict() if hasattr(row, "to_dict") else dict(row)
+        is_break = break_at is not None and i == break_at
+        tiles_html += flight_recorder_tile(entry_dict, is_break=is_break)
+        if is_break:
+            tiles_html += '<div class="tape-gap">|||</div>'
+    tiles_html += "</div>"
+    st.markdown(tiles_html, unsafe_allow_html=True)
+
+    st.dataframe(entries, use_container_width=True, hide_index=True)
+
     path = Path(AUDIT_LOG_PATH)
     if path.exists():
-        st.download_button("Download audit JSONL", path.read_bytes(), file_name="trace_log.jsonl", mime="application/jsonl")
+        st.download_button(
+            "Download audit JSONL",
+            path.read_bytes(),
+            file_name="trace_log.jsonl",
+            mime="application/jsonl",
+        )
 
 
 def main():
