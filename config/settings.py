@@ -63,18 +63,18 @@ APP_PAGE_TITLE = "PV-Trace | Drug Safety Intelligence"
 APP_SUBTITLE = "Signal Intelligence System"
 EXAMPLE_DRUGS = ["Ibuprofen", "Warfarin", "Metformin", "Atorvastatin"]
 
-# UI color tokens.
-COLOR_BACKGROUND = "#0a0f1e"
+# UI color tokens — Signal Station palette.
+COLOR_BACKGROUND = "#0B1210"
 COLOR_SIDEBAR = "#050a14"
-COLOR_CARD = "#111827"
+COLOR_CARD = "#14231F"
 COLOR_CARD_ALT = "#0d1421"
-COLOR_BORDER = "#1f2937"
-COLOR_PRIMARY = "#00d4aa"
-COLOR_WARNING = "#e2b86a"
-COLOR_DANGER = "#ef4444"
+COLOR_BORDER = "#1E332C"
+COLOR_PRIMARY = "#4CFFA0"
+COLOR_WARNING = "#FFB74D"
+COLOR_DANGER = "#FF4757"
 COLOR_TEXT = "#e5e7eb"
-COLOR_MUTED = "#94a3b8"
-COLOR_SUCCESS = "#22c55e"
+COLOR_MUTED = "#7A8C86"
+COLOR_SUCCESS = "#4CFFA0"
 COLOR_INFO = "#3b82f6"
 
 # Hugging Face free inference API.
