@@ -44,7 +44,6 @@ from dashboard.theme import (
     GRID_LINE,
     FONT_MONO,
     SIGNAL_COLOR,
-    EXAMPLE_DRUGS,
 )
 from pipeline.deadline_calculator import DeadlineCalculator
 from pipeline.e2b_exporter import E2BExporter
