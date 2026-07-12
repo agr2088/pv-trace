@@ -44,6 +44,7 @@ from dashboard.theme import (
     GRID_LINE,
     FONT_MONO,
     SIGNAL_COLOR,
+    inline_entity_highlight,
 )
 from pipeline.deadline_calculator import DeadlineCalculator
 from pipeline.e2b_exporter import E2BExporter
@@ -659,6 +660,16 @@ def render_ner_tab():
             unsafe_allow_html=True,
         )
 
+        st.markdown(
+            inline_entity_highlight(
+                text_input,
+                result.get("drugs", []),
+                result.get("ae_terms", []),
+                result.get("demographics", {}).get("dates", []),
+            ),
+            unsafe_allow_html=True,
+        )
+
         col1, col2, col3 = st.columns(3)
         col1.metric("Drugs", len(result["drugs"]))
         col2.metric("AE terms", len(result["ae_terms"]))
@@ -761,7 +772,7 @@ def render_e2b_tab(results: dict):
                     )
                     st.rerun()
 
-        if st.session_state[active_seg]:
+        if st.session_state[active_seg] == "Reaction":
             st.markdown(reactionoutcome_disclosure(), unsafe_allow_html=True)
 
         if xml_text:

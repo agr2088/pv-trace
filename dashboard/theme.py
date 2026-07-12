@@ -248,6 +248,36 @@ hr {{ border-color: {PANEL_BORDER}; }}
 ::-webkit-scrollbar-thumb {{ background: {PANEL_BORDER}; border-radius: 3px; }}
 ::-webkit-scrollbar-thumb:hover {{ background: {STATIC_FOG}; }}
 
+/* ── NER entity underlines ── */
+.entity-drug {{
+    color: {PHOSPHOR};
+    border-bottom: 2px solid {PHOSPHOR};
+    padding-bottom: 1px;
+}}
+.entity-ae {{
+    color: {AMBER_TRACE};
+    border-bottom: 2px solid {AMBER_TRACE};
+    padding-bottom: 1px;
+}}
+.entity-date {{
+    color: {STATIC_FOG};
+    border-bottom: 1px dashed {STATIC_FOG};
+    padding-bottom: 1px;
+    font-style: italic;
+}}
+.ner-highlighted-text {{
+    font-family: '{FONT_MONO}', monospace;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: #e5e7eb;
+    background: {CONSOLE_PANEL};
+    border: 1px solid {PANEL_BORDER};
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}}
+
 /* ── Prefers reduced motion ── */
 @media (prefers-reduced-motion: reduce) {{
     .radar-sweep {{ animation: none !important; }}
@@ -802,6 +832,34 @@ def empty_station_shell(label: str = "No signal acquired") -> str:
         </div>
     </div>
     """
+
+
+def inline_entity_highlight(text: str, drugs: list[str], ae_terms: list[str],
+                            dates: list[str] | None = None) -> str:
+    """Render input text with colored underlines for detected entities.
+
+    drug mentions = PHOSPHOR underline, AE terms = AMBER_TRACE underline,
+    dates = STATIC_FOG dashed underline. Case-insensitive replacement,
+    longest-match-first to avoid partial overlaps.
+    """
+    import re as _re
+    import html as _html
+
+    safe = _html.escape(text)
+    replacements: list[tuple[str, str]] = []
+
+    for d in sorted(drugs, key=len, reverse=True):
+        replacements.append((d, f'<span class="entity-drug">{_html.escape(d)}</span>'))
+    for a in sorted(ae_terms, key=len, reverse=True):
+        replacements.append((a, f'<span class="entity-ae">{_html.escape(a)}</span>'))
+    for dt in sorted(dates or [], key=len, reverse=True):
+        replacements.append((dt, f'<span class="entity-date">{_html.escape(dt)}</span>'))
+
+    for original, replacement in replacements:
+        pattern = _re.compile(_re.escape(original), _re.IGNORECASE)
+        safe = pattern.sub(replacement, safe)
+
+    return f'<div class="ner-highlighted-text">{safe}</div>'
 
 
 def status_bar(text: str, color: str = STATIC_FOG) -> str:
