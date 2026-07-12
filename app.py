@@ -32,9 +32,18 @@ from dashboard.theme import (
     header_bar,
     clinical_warning_banner,
     empty_station_shell,
+    metric_card,
+    noise_floor_ring_label,
+    sweep_overlay_html,
     PHOSPHOR,
     STATIC_FOG,
     AMBER_TRACE,
+    ALERT_CRIMSON,
+    CONSOLE_PANEL,
+    DEEP_RADAR,
+    GRID_LINE,
+    FONT_MONO,
+    SIGNAL_COLOR,
     EXAMPLE_DRUGS,
 )
 from pipeline.deadline_calculator import DeadlineCalculator
@@ -252,34 +261,126 @@ def render_landing():
 
 
 def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str):
+    import numpy as np
+
     events_df = results["events_df"]
     signals_df = results["signals_df"]
-    st.subheader(f"Signal Analysis: {drug_name}")
-    col1, col2, col3, col4 = st.columns(4)
-    signal_count = int(signals_df["is_signal"].sum()) if not signals_df.empty else 0
-    highest_prr = signals_df["prr"].max() if not signals_df.empty else 0
-    most_reported = signals_df.iloc[0]["event_pt"] if not signals_df.empty else "N/A"
-    col1.metric("Total unique cases", events_df["primaryid"].nunique() if not events_df.empty else 0)
-    col2.metric("Signals detected", signal_count)
-    col3.metric("Highest PRR", f"{highest_prr:.2f}" if pd.notna(highest_prr) else "N/A")
-    col4.metric("Most reported event", most_reported)
+
+    if signals_df.empty:
+        st.markdown(empty_station_shell("No signal acquired"), unsafe_allow_html=True)
+        return
+
+    signal_count = int(signals_df["is_signal"].sum())
+    highest_prr = signals_df["prr"].max()
+
+    st.markdown(
+        f'<div class="station-label">Station I — The Radar: {drug_name}</div>',
+        unsafe_allow_html=True,
+    )
+
+    top_metrics = st.columns(4)
+    top_metrics[0].metric("Total unique cases", events_df["primaryid"].nunique())
+    top_metrics[1].metric("Signals detected", signal_count)
+    top_metrics[2].metric("Highest PRR", f"{highest_prr:.2f}" if pd.notna(highest_prr) else "N/A")
+    top_metrics[3].metric("Events analyzed", len(signals_df))
 
     bg = results.get("bg_metadata")
     if bg:
-        parts = [
-            f"Real FAERS background counts used for **{bg['events_with_background']}** top events by case count."
-        ]
-        if bg["events_excluded"] > 0:
-            parts.append(
-                f"**{bg['events_excluded']}** lower-frequency events excluded from signal scoring "
-                f"(population-rate estimate applied instead)."
-            )
-        if bg["bg_failures"] > 0:
-            parts.append(
-                f"**{bg['bg_failures']}** event(s) failed during background fetch "
-                f"(population-rate estimate used for those events)."
-            )
-        st.caption(" ".join(parts))
+        st.markdown(
+            noise_floor_ring_label(
+                bg["events_with_background"],
+                bg["events_excluded"],
+                bg["bg_failures"],
+            ),
+            unsafe_allow_html=True,
+        )
+
+    radar_df = signals_df.head(20).copy()
+    radar_df["r"] = np.log10(radar_df["prr"].clip(lower=1.01))
+    radar_df["angle_slot"] = np.linspace(0, 360, len(radar_df), endpoint=False)
+    radar_df["status"] = radar_df.apply(
+        lambda row: "signal" if row["is_signal"]
+        else ("borderline" if row["prr"] >= 1.0 else "noise"),
+        axis=1,
+    )
+
+    fig = go.Figure()
+    for _, row in radar_df.iterrows():
+        color = SIGNAL_COLOR[row["status"]]
+        fig.add_trace(go.Scatterpolar(
+            r=[row["r"]],
+            theta=[row["angle_slot"]],
+            mode="markers",
+            marker=dict(
+                size=8 + np.log1p(row["case_count"]) * 2,
+                color=color,
+                line=dict(color=DEEP_RADAR, width=1),
+            ),
+            name=row["event_pt"],
+            hovertemplate=(
+                f"<b>{row['event_pt']}</b><br>"
+                f"PRR={row['prr']:.2f}<br>"
+                f"a={int(row['case_count'])}<br>"
+                f"<extra></extra>"
+            ),
+        ))
+    fig.update_layout(
+        polar=dict(
+            bgcolor=CONSOLE_PANEL,
+            radialaxis=dict(color=STATIC_FOG, gridcolor=GRID_LINE, range=[0, 1.6]),
+            angularaxis=dict(showticklabels=False, gridcolor=GRID_LINE),
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=FONT_MONO, color=PHOSPHOR),
+        showlegend=False,
+        height=520,
+        margin=dict(t=20, b=20, l=40, r=40),
+    )
+
+    st.markdown(
+        '<div style="position:relative;">',
+        unsafe_allow_html=True,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.markdown(sweep_overlay_html(), unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div style="font-family:\'{FONT_MONO}\',monospace;font-size:0.72rem;'
+        f'color:{STATIC_FOG};text-align:center;padding:0.2rem 0;">'
+        f'&#9678; Radial distance = log(PRR) &middot; Blip size = case count &middot; '
+        f'Green = signal &middot; Amber = borderline &middot; Gray = noise</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="station-label" style="margin-top:0.8rem;">Instrument Readout</div>',
+                unsafe_allow_html=True)
+
+    avg_prr = signals_df["prr"].mean() if not signals_df.empty else 0
+    avg_ror = signals_df["ror"].mean() if not signals_df.empty else 0
+    avg_ebgm = signals_df["ebgm"].dropna().mean() if not signals_df.empty else 0
+    avg_chi2 = signals_df["chi2"].mean() if not signals_df.empty else 0
+
+    readout = st.columns(4)
+    readout[0].markdown(
+        metric_card("PRR", f"{avg_prr:.2f}", avg_prr, PRR_THRESHOLD, f">= {PRR_THRESHOLD}"),
+        unsafe_allow_html=True,
+    )
+    readout[1].markdown(
+        metric_card("ROR", f"{avg_ror:.2f}", avg_ror, ROR_THRESHOLD, f">= {ROR_THRESHOLD}"),
+        unsafe_allow_html=True,
+    )
+    readout[2].markdown(
+        metric_card("EBGM", f"{avg_ebgm:.2f}", avg_ebgm, 2.0, ">= 2.0"),
+        unsafe_allow_html=True,
+    )
+    readout[3].markdown(
+        metric_card("Chi2", f"{avg_chi2:.2f}", avg_chi2, CHI2_THRESHOLD, f">= {CHI2_THRESHOLD}"),
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="station-label" style="margin-top:1rem;">Signal Detail Table</div>',
+                unsafe_allow_html=True)
 
     display_df = signals_df.copy()
     if not display_df.empty:
@@ -291,8 +392,8 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
         display_df["ROR"] = display_df.apply(
             lambda row: formatter.format_prr(row["ror"], row["ror_lower"], row["ror_upper"]), axis=1
         )
-        display_df["EBGM"] = display_df["ebgm"].map(lambda value: f"{value:.2f}" if pd.notna(value) else "N/A")
-        display_df["Chi2"] = display_df["chi2"].map(lambda value: f"{value:.2f}")
+        display_df["EBGM"] = display_df["ebgm"].map(lambda v: f"{v:.2f}" if pd.notna(v) else "N/A")
+        display_df["Chi2"] = display_df["chi2"].map(lambda v: f"{v:.2f}")
         display_df["Signal"] = display_df["is_signal"].map(formatter.format_signal_badge)
     table = formatter.dataframe_to_display(display_df, ["Event", "Cases", "PRR", "ROR", "EBGM", "Chi2", "Signal"])
     st.dataframe(
@@ -300,83 +401,26 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Cases": st.column_config.NumberColumn("Cases", format="%d 📄"),
+            "Cases": st.column_config.NumberColumn("Cases", format="%d"),
             "PRR": st.column_config.TextColumn("PRR (95% CI)", width="medium"),
             "ROR": st.column_config.TextColumn("ROR (95% CI)", width="medium"),
             "Signal": st.column_config.TextColumn("Signal Status"),
         },
     )
-    if signals_df.empty:
-        st.info(
-            "No adverse event terms were found in the FAERS data for this drug. "
-            "This may indicate low report volume, a brand name vs. generic mismatch, "
-            "or that the drug has very few spontaneous reports. Try the generic INN name."
-        )
-    elif signal_count == 0:
+
+    if signal_count == 0:
         st.success(
             f"No signals meeting WHO-UMC criteria (PRR >= {PRR_THRESHOLD}, Chi2 >= {CHI2_THRESHOLD}, "
-            f"n >= {MIN_CASE_COUNT}) were detected for this drug across {len(signals_df)} adverse event terms. "
-            "Continue routine pharmacovigilance monitoring per standard practice."
+            f"n >= {MIN_CASE_COUNT}) were detected for {len(signals_df)} adverse event terms. "
+            "Continue routine pharmacovigilance monitoring."
         )
+
     st.download_button(
         "Download signal CSV",
         signals_df.to_csv(index=False).encode("utf-8"),
         file_name=f"{drug_name.lower()}_signals.csv",
         mime="text/csv",
     )
-
-    if not signals_df.empty:
-        st.divider()
-        chart_col1, chart_col2 = st.columns(2)
-
-        with chart_col1:
-            top_n = signals_df.head(15).copy()
-            fig_prr = px.bar(
-                top_n,
-                x="prr",
-                y="event_pt",
-                orientation="h",
-                color="is_signal",
-                color_discrete_map={True: "#ef4444", False: "#00d4aa"},
-                labels={"prr": "PRR", "event_pt": "Adverse Event", "is_signal": "Signal"},
-                title="PRR by Adverse Event (Top 15)",
-            )
-            fig_prr.add_vline(x=PRR_THRESHOLD, line_dash="dash", line_color="#e2b86a", annotation_text="WHO-UMC threshold")
-            fig_prr.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                font_color="#e5e7eb",
-                height=400,
-                showlegend=True,
-            )
-            st.plotly_chart(fig_prr, use_container_width=True)
-
-        with chart_col2:
-            scatter_df = signals_df.dropna(subset=["prr", "ror"]).head(30)
-            fig_scatter = px.scatter(
-                scatter_df,
-                x="prr",
-                y="ror",
-                size="case_count",
-                color="is_signal",
-                color_discrete_map={True: "#ef4444", False: "#00d4aa"},
-                hover_name="event_pt",
-                labels={"prr": "PRR", "ror": "ROR", "is_signal": "Signal"},
-                title="PRR vs ROR Disproportionality Plot",
-            )
-            fig_scatter.add_vline(x=PRR_THRESHOLD, line_dash="dash", line_color="#e2b86a")
-            fig_scatter.add_hline(y=ROR_THRESHOLD, line_dash="dash", line_color="#e2b86a")
-            fig_scatter.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                font_color="#e5e7eb",
-                height=400,
-            )
-            fig_scatter.update_traces(
-                marker=dict(line=dict(width=1, color="#1f2937")),
-                hovertemplate="<b>%{hovertext}</b><br><br>PRR Score: %{x:.2f}<br>ROR Score: %{y:.2f}<br>Case Count: %{marker.size}<extra></extra>",
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
 
 
 def render_clinical_tab(results: dict):
