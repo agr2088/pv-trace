@@ -2,12 +2,10 @@ streamlit>=1.32.0
 pandas>=2.0.0
 numpy>=1.24.0
 requests>=2.31.0
-pytest>=7.4.0
+urllib3>=2.0.0
 python-dotenv>=1.0.0
 scipy>=1.11.0
 plotly>=5.18.0
-lxml>=5.1.0
 spacy>=3.7.0
-scispacy>=0.5.4
-https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_core_sci_sm-0.5.4.tar.gz
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+pytest>=7.4.0
+pytest-timeout>=2.2.0

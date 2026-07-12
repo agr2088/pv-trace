@@ -1,8 +1,33 @@
+# Environment
 .env
+.streamlit/secrets.toml
+
+# Audit logs (contain run data)
 audit/*.jsonl
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Testing
 .pytest_cache/
-.streamlit/secrets.toml
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Virtual environments
 venv/
 .venv/
+env/
