@@ -1,6 +1,6 @@
 """ICH E2B(R3)-style XML export."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from xml.etree import ElementTree as ET
 
 from config.settings import E2B_BATCH_LIMIT
@@ -13,7 +13,7 @@ class E2BExporter:
         root = ET.Element("ichicsr", {"lang": "en"})
         header = ET.SubElement(root, "ichicsrmessageheader")
         ET.SubElement(header, "messagetype").text = "ichicsr"
-        ET.SubElement(header, "messagedate").text = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        ET.SubElement(header, "messagedate").text = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         ET.SubElement(header, "messageidentifier").text = str(case.get("primaryid", ""))
 
         report = ET.SubElement(root, "safetyreport")
@@ -40,7 +40,8 @@ class E2BExporter:
             ET.SubElement(drug, "drugdosagetext").text = dose
         reaction = ET.SubElement(patient, "reaction")
         ET.SubElement(reaction, "reactionmeddrapt").text = str(case.get("event_pt", ""))
-        ET.SubElement(reaction, "reactionoutcome").text = str(case.get("outcome_code", ""))
+        reaction_outcome = str(case.get("reaction_outcome", "")).strip()
+        ET.SubElement(reaction, "reactionoutcome").text = reaction_outcome if reaction_outcome else "6"
 
         ET.indent(root, space="  ")
         xml_body = ET.tostring(root, encoding="unicode")

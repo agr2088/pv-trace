@@ -120,8 +120,8 @@ class DeadlineCalculator:
     @staticmethod
     def _rule_reference(deadline_days: int) -> str:
         references = {
-            7: "ICH E2A §3.2 - Fatal/Life-threatening (7-day rule)",
-            15: "ICH E2A §3.3 - Serious unexpected (15-day rule)",
+            7: "ICH E2A §3.2 - Fatal/Life-threatening (7-day rule) *(assumes unexpected)*",
+            15: "ICH E2A §3.3 - Serious unexpected (15-day rule) *(assumes unexpected)*",
             90: "ICH E2A §3.4 - Non-serious (90-day rule)",
         }
         return references.get(deadline_days, f"ICH E2A - {deadline_days}-day rule")

@@ -17,6 +17,7 @@ PRR_THRESHOLD = 2.0
 ROR_THRESHOLD = 2.0
 CHI2_THRESHOLD = 4.0
 MIN_CASE_COUNT = 3
+BACKGROUND_EVENT_LIMIT = 20
 
 # Deadline rules based on ICH E2A expedited reporting windows.
 FATAL_UNEXPECTED_DAYS = 7
@@ -31,10 +32,11 @@ OUTCOME_CODES = {
     "DS": "Disability",
     "CA": "Congenital anomaly",
     "OT": "Other serious",
+    "RI": "Required intervention",
 }
 
 # Outcomes treated as serious for reporting and deadline rules.
-SERIOUS_OUTCOMES = ["DE", "HO", "LT", "DS", "CA"]
+SERIOUS_OUTCOMES = ["DE", "HO", "LT", "DS", "CA", "OT", "RI"]
 
 # Regulatory regions displayed in deadline comparison.
 REGIONS = ["FDA (USA)", "EMA (Europe)", "CDSCO (India)"]
@@ -112,7 +114,8 @@ SOC_KEYWORDS = {
 DRUG_ENTITY_LABELS = {"CHEMICAL", "SIMPLE_CHEMICAL", "DRUG"}
 AE_ENTITY_LABELS = {"DISEASE", "SYNDROME", "PATHOLOGICAL_FORMATION", "SIGN_OR_SYMPTOM"}
 FALLBACK_DRUG_ENTITY_LABELS = {"PRODUCT"}
-FALLBACK_AE_ENTITY_LABELS = {"DISEASE"}
+# en_core_web_sm has no biomedical NER labels; AE extraction relies on SOC_KEYWORDS in fallback mode.
+FALLBACK_AE_ENTITY_LABELS = set()
 
 # Regional deadline rules (ICH E2A + regional adaptations).
 REGIONAL_DEADLINE_RULES = {

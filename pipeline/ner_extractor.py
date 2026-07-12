@@ -90,6 +90,7 @@ class NERExtractor:
             "sentence_count": len(list(doc.sents)),
             "token_count": len(doc),
             "model_used": self.nlp.meta.get("name", "unknown"),
+            "ae_extraction_mode": "NER" if self._is_biomedical else "SOC_KEYWORDS_ONLY",
         }
 
     def suggest_drug_query(self, text: str) -> str | None:

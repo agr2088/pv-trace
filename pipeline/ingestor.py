@@ -65,6 +65,7 @@ class OpenFDAIngestor:
                 "age",
                 "gender",
                 "dose",
+                "reaction_outcome",
             ],
         )
 
@@ -74,6 +75,18 @@ class OpenFDAIngestor:
                 f'patient.drug.medicinalproduct:"{drug_name}"'
                 f' AND patient.reaction.reactionmeddrapt:"{event_pt}"'
             ),
+            "limit": 1,
+        }
+        try:
+            response = self.session.get(self.base_url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            return int(response.json().get("meta", {}).get("results", {}).get("total", 0))
+        except requests.RequestException:
+            return 0
+
+    def fetch_event_total_count(self, event_pt: str) -> int:
+        params = {
+            "search": f'patient.reaction.reactionmeddrapt:"{event_pt}"',
             "limit": 1,
         }
         try:
@@ -109,9 +122,13 @@ class OpenFDAIngestor:
             "dose": self._extract_dose(report, drug_name),
         }
         if not reactions:
-            return [{**base, "event_pt": "Unspecified adverse event"}]
+            return [{**base, "event_pt": "Unspecified adverse event", "reaction_outcome": ""}]
         return [
-            {**base, "event_pt": reaction.get("reactionmeddrapt") or "Unspecified adverse event"}
+            {
+                **base,
+                "event_pt": reaction.get("reactionmeddrapt") or "Unspecified adverse event",
+                "reaction_outcome": str(reaction.get("reactionoutcome", "")),
+            }
             for reaction in reactions
         ]
 

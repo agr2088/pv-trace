@@ -18,6 +18,7 @@ from config.settings import (
     APP_SUBTITLE,
     AUDIT_DISPLAY_LIMIT,
     AUDIT_LOG_PATH,
+    BACKGROUND_EVENT_LIMIT,
     CACHE_TTL_SECONDS,
     CHI2_THRESHOLD,
     COLOR_BORDER,
@@ -190,6 +191,25 @@ def cached_fetch(drug_name: str):
     return ingestor.fetch_drug_events(drug_name), ingestor.fetch_total_count()
 
 
+@st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
+def fetch_background_counts(event_pts_json: str) -> dict:
+    import json as _json
+    import logging
+
+    event_pts = _json.loads(event_pts_json)
+    ingestor = OpenFDAIngestor()
+    counts = {}
+    failures = 0
+    for event_pt in event_pts:
+        try:
+            count = ingestor.fetch_event_total_count(event_pt)
+            counts[event_pt] = count
+        except Exception:
+            failures += 1
+            logging.warning("Background count unavailable for '%s'; using population-rate estimate", event_pt)
+    return {"counts": counts, "failures": failures}
+
+
 def run_pipeline(drug_name: str) -> dict:
     logger = AuditLogger(drug_name)
     status = st.status(f"Running PV-Trace analysis for {drug_name}", expanded=True)
@@ -202,9 +222,26 @@ def run_pipeline(drug_name: str) -> dict:
         logger.log_step("ingestion", "completed", {"cases": len(events_df), "total_db_count": total_count})
         progress.progress(20, text=f"Fetched {len(events_df)} FAERS cases")
 
+        status.write("Fetching real FAERS background event counts for top events...")
+        filled = events_df["event_pt"].fillna("Unspecified adverse event")
+        event_counts_s = events_df.assign(event_pt=filled).groupby("event_pt")["primaryid"].nunique()
+        top_events = event_counts_s.sort_values(ascending=False).head(BACKGROUND_EVENT_LIMIT)
+        total_distinct_events = len(event_counts_s)
+        events_excluded = max(0, total_distinct_events - BACKGROUND_EVENT_LIMIT)
+        import json as _json
+        bg_result = fetch_background_counts(_json.dumps(list(top_events.index)))
+        event_background_counts = bg_result["counts"]
+        bg_failures = bg_result["failures"]
+        status.write(
+            f"Background counts fetched for {len(event_background_counts)} of {len(top_events)} top events"
+            + (f"; {bg_failures} failed (population-rate estimate used)" if bg_failures else "")
+            + (f"; {events_excluded} lower-frequency events excluded" if events_excluded else "")
+        )
+        progress.progress(30, text="Background counts fetched")
+
         status.write("Calculating PRR, ROR, EBGM, and chi-square signal statistics...")
         detector = SignalDetector()
-        signals_df = detector.analyze_drug(events_df, total_count)
+        signals_df = detector.analyze_drug(events_df, total_count, event_background_counts=event_background_counts)
         logger.log_step("signal_detection", "completed", {"events_analyzed": len(signals_df)})
         for _, row in signals_df.head(AUDIT_DISPLAY_LIMIT).iterrows():
             logger.log_signal(drug_name, row["event_pt"], row["prr"], row["ror"], bool(row["is_signal"]))
@@ -250,6 +287,12 @@ def run_pipeline(drug_name: str) -> dict:
             "deadlines_df": deadlines_df,
             "e2b_exports": e2b_exports,
             "run_summary": summary,
+            "bg_metadata": {
+                "total_distinct_events": total_distinct_events,
+                "events_with_background": len(event_background_counts),
+                "events_excluded": events_excluded,
+                "bg_failures": bg_failures,
+            },
         }
     except Exception:
         status.update(label=f"PV-Trace analysis failed for {drug_name}", state="error", expanded=True)
@@ -339,10 +382,27 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
     signal_count = int(signals_df["is_signal"].sum()) if not signals_df.empty else 0
     highest_prr = signals_df["prr"].max() if not signals_df.empty else 0
     most_reported = signals_df.iloc[0]["event_pt"] if not signals_df.empty else "N/A"
-    col1.metric("Total cases fetched", len(events_df))
+    col1.metric("Total unique cases", events_df["primaryid"].nunique() if not events_df.empty else 0)
     col2.metric("Signals detected", signal_count)
     col3.metric("Highest PRR", f"{highest_prr:.2f}" if pd.notna(highest_prr) else "N/A")
     col4.metric("Most reported event", most_reported)
+
+    bg = results.get("bg_metadata")
+    if bg:
+        parts = [
+            f"Real FAERS background counts used for **{bg['events_with_background']}** top events by case count."
+        ]
+        if bg["events_excluded"] > 0:
+            parts.append(
+                f"**{bg['events_excluded']}** lower-frequency events excluded from signal scoring "
+                f"(population-rate estimate applied instead)."
+            )
+        if bg["bg_failures"] > 0:
+            parts.append(
+                f"**{bg['bg_failures']}** event(s) failed during background fetch "
+                f"(population-rate estimate used for those events)."
+            )
+        st.caption(" ".join(parts))
 
     display_df = signals_df.copy()
     if not display_df.empty:
@@ -494,6 +554,11 @@ def render_narrative_tab(results: dict):
 
 def render_deadline_tab(results: dict, formatter: OutputFormatter):
     st.subheader(f"Deadline status as of {pd.Timestamp.today().date()}")
+    st.info(
+        "**All 7-day and 15-day deadlines assume the reported reaction is unexpected per ICH E2A.** "
+        "FAERS/openFDA does not contain product labeling data needed to verify listedness. "
+        "Confirm expectedness against approved product labeling before regulatory submission."
+    )
     deadlines_df = results["deadlines_df"]
     display = formatter.dataframe_to_display(
         deadlines_df,
@@ -648,6 +713,11 @@ def render_e2b_tab(results: dict):
         "Additional sender, receiver, indication, and time-to-onset fields are required before regulatory submission.</p>"
         "</div>",
         unsafe_allow_html=True,
+    )
+    st.caption(
+        "Per-reaction recovery status is taken directly from the openFDA `reactionoutcome` field when available. "
+        "Where absent from the source report, outcomes default to 'unknown' (code 6). "
+        "Patient age is parsed from the FAERS formatted string; verify against source data before submission."
     )
     if not exports:
         st.info("No E2B exports generated.")

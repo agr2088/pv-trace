@@ -65,11 +65,13 @@ class SignalDetector:
         expected = ((a + b) * (a + c)) / total
         return float((a + 0.5) / (expected + 0.5)) if expected > 0 else None
 
-    def is_signal(self, a: int, prr: float, chi2: float) -> bool:
+    def is_signal(self, a: int, prr: float, ror: float, chi2: float) -> bool:
         return bool(
             a >= self.min_case_count
             and prr is not None
             and prr >= self.prr_threshold
+            and ror is not None
+            and ror >= self.ror_threshold
             and chi2 >= self.chi2_threshold
         )
 
@@ -106,14 +108,15 @@ class SignalDetector:
         if drug_events_df.empty:
             return pd.DataFrame(columns=columns)
 
-        total_drug_rows = len(drug_events_df)
-        background_total = max(int(total_db_count), total_drug_rows + 1)
+        total_drug_cases = drug_events_df["primaryid"].nunique()
+        background_total = max(int(total_db_count), total_drug_cases + 1)
         rows = []
-        event_counts = drug_events_df["event_pt"].fillna("Unspecified adverse event").value_counts()
+        filled = drug_events_df["event_pt"].fillna("Unspecified adverse event")
+        event_counts = drug_events_df.assign(event_pt=filled).groupby("event_pt")["primaryid"].nunique()
 
         for event_pt, a in event_counts.items():
             a = int(a)
-            b = max(total_drug_rows - a, 0)
+            b = max(total_drug_cases - a, 0)
 
             if event_background_counts and event_pt in event_background_counts:
                 total_event_in_db = int(event_background_counts[event_pt])
@@ -122,7 +125,7 @@ class SignalDetector:
                 # Estimate background using a conservative population rate.
                 # Assume background event rate = 1 per 10,000 FAERS reports
                 # when real counts are unavailable.
-                background_n = max(background_total - total_drug_rows, 1)
+                background_n = max(background_total - total_drug_cases, 1)
                 c = max(int(background_n // 10_000), 1)
 
             d = max(background_total - a - b - c, 0)
@@ -138,7 +141,7 @@ class SignalDetector:
                     **ror_result,
                     "ebgm": ebgm,
                     "chi2": chi2,
-                    "is_signal": self.is_signal(a, prr_result["prr"], chi2),
+                    "is_signal": self.is_signal(a, prr_result["prr"], ror_result["ror"], chi2),
                 }
             )
 
