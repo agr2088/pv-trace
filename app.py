@@ -1,4 +1,4 @@
-"""PV-Trace Streamlit dashboard."""
+"""PV-Trace Streamlit dashboard — The Signal Station."""
 
 import hashlib
 import json
@@ -15,25 +15,27 @@ from audit.logger import AuditLogger
 from config.settings import (
     APP_NAME,
     APP_PAGE_TITLE,
-    APP_SUBTITLE,
     AUDIT_DISPLAY_LIMIT,
     AUDIT_LOG_PATH,
     BACKGROUND_EVENT_LIMIT,
     CACHE_TTL_SECONDS,
     CHI2_THRESHOLD,
-    COLOR_BORDER,
-    COLOR_CARD,
-    COLOR_DANGER,
-    COLOR_MUTED,
-    COLOR_PRIMARY,
-    COLOR_SIDEBAR,
-    COLOR_TEXT,
     E2B_BATCH_LIMIT,
     EXAMPLE_DRUGS,
     MIN_CASE_COUNT,
     NARRATIVE_DISPLAY_LIMIT,
     PRR_THRESHOLD,
     ROR_THRESHOLD,
+)
+from dashboard.theme import (
+    inject_theme,
+    header_bar,
+    clinical_warning_banner,
+    empty_station_shell,
+    PHOSPHOR,
+    STATIC_FOG,
+    AMBER_TRACE,
+    EXAMPLE_DRUGS,
 )
 from pipeline.deadline_calculator import DeadlineCalculator
 from pipeline.e2b_exporter import E2BExporter
@@ -50,139 +52,12 @@ st.set_page_config(
     page_title=APP_PAGE_TITLE,
     page_icon="🔬",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
 def inject_css():
-    st.markdown(
-        f"""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,700;1,400&family=DM+Mono:wght@400;500&display=swap');
-
-        html, body, [class*="css"] {{
-            font-family: 'DM Sans', sans-serif;
-        }}
-
-        section[data-testid="stSidebar"] {{
-            background: {COLOR_SIDEBAR};
-            border-right: 1px solid {COLOR_BORDER};
-        }}
-
-        .block-container {{ padding-top: 1.5rem; max-width: 1400px; }}
-
-        .pv-card {{
-            background: {COLOR_CARD};
-            border: 1px solid {COLOR_BORDER};
-            border-radius: 10px;
-            padding: 1.25rem;
-            min-height: 100px;
-            transition: border-color 0.2s;
-        }}
-        .pv-card:hover {{ border-color: {COLOR_PRIMARY}; }}
-
-        div[data-testid="stMetric"] {{
-            background: {COLOR_CARD};
-            border: 1px solid {COLOR_BORDER};
-            border-left: 3px solid {COLOR_PRIMARY};
-            border-radius: 10px;
-            padding: 0.9rem 1rem;
-        }}
-        div[data-testid="stMetricValue"] {{
-            font-family: 'DM Mono', monospace;
-            color: {COLOR_TEXT} !important;
-        }}
-        div[data-testid="stMetricLabel"] {{
-            color: {COLOR_MUTED} !important;
-            font-size: 0.8rem;
-        }}
-
-        .badge {{
-            display: inline-block;
-            border-radius: 999px;
-            padding: 0.2rem 0.7rem;
-            font-family: 'DM Mono', monospace;
-            font-size: 0.78rem;
-            font-weight: 500;
-            margin: 2px;
-        }}
-        .badge-signal {{ background: rgba(239,68,68,0.15); color: {COLOR_DANGER}; border: 1px solid rgba(239,68,68,0.3); }}
-        .badge-monitor {{ background: rgba(0,212,170,0.12); color: {COLOR_PRIMARY}; border: 1px solid rgba(0,212,170,0.3); }}
-        .badge-overdue {{ background: rgba(239,68,68,0.15); color: {COLOR_DANGER}; }}
-
-        .stButton > button {{
-            border-radius: 8px;
-            border: 1px solid {COLOR_BORDER};
-            background: transparent;
-            color: {COLOR_TEXT};
-            transition: all 0.15s;
-        }}
-        .stButton > button:hover {{
-            border-color: {COLOR_PRIMARY};
-            color: {COLOR_PRIMARY};
-        }}
-        .stButton > button[kind="primary"] {{
-            background: {COLOR_PRIMARY};
-            color: #0a0f1e;
-            border: 0;
-            font-weight: 600;
-        }}
-        .stButton > button[kind="primary"]:hover {{
-            background: #00b899;
-            color: #0a0f1e;
-        }}
-
-        .stTabs [data-baseweb="tab-list"] {{
-            background: {COLOR_CARD};
-            border-radius: 10px;
-            padding: 4px;
-            gap: 2px;
-        }}
-        .stTabs [data-baseweb="tab"] {{
-            border-radius: 7px;
-            color: {COLOR_MUTED};
-            font-size: 0.88rem;
-            font-weight: 500;
-            padding: 6px 14px;
-        }}
-        .stTabs [aria-selected="true"] {{
-            background: {COLOR_PRIMARY} !important;
-            color: #0a0f1e !important;
-            font-weight: 700;
-        }}
-
-        .stDataFrame {{ border-radius: 8px; overflow: hidden; }}
-        hr {{ border-color: {COLOR_BORDER}; }}
-        .stCode, code {{
-            background: {COLOR_CARD} !important;
-            border: 1px solid {COLOR_BORDER} !important;
-            border-radius: 6px;
-        }}
-
-        .stTextInput input, .stTextArea textarea {{
-            background: {COLOR_CARD} !important;
-            border: 1px solid {COLOR_BORDER} !important;
-            color: {COLOR_TEXT} !important;
-            border-radius: 8px;
-        }}
-        .stTextInput input:focus, .stTextArea textarea:focus {{
-            border-color: {COLOR_PRIMARY} !important;
-            box-shadow: 0 0 0 2px rgba(0,212,170,0.15) !important;
-        }}
-
-        .stProgress > div > div {{
-            background: {COLOR_PRIMARY};
-        }}
-
-        .streamlit-expanderHeader {{
-            background: {COLOR_CARD};
-            border: 1px solid {COLOR_BORDER};
-            border-radius: 8px;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown(inject_theme(), unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS, show_spinner=False)
@@ -330,14 +205,16 @@ def render_landing():
     st.markdown(
         f"""
         <div style='text-align:center;padding:2rem 0 1rem'>
-            <div style='font-family:DM Mono,monospace;font-size:0.8rem;color:{COLOR_PRIMARY};
+            <div style='font-family:Space Grotesk,sans-serif;font-size:0.8rem;color:{PHOSPHOR};
                         letter-spacing:0.2em;text-transform:uppercase;margin-bottom:0.5rem'>
                 Pharmacovigilance Signal Intelligence
             </div>
-            <h1 style='font-size:2.4rem;font-weight:700;margin:0;letter-spacing:0'>
+            <h1 style='font-family:Space Grotesk,sans-serif;font-size:2.4rem;font-weight:700;
+                       margin:0;letter-spacing:0;color:#e5e7eb'>
                 PV-Trace
             </h1>
-            <p style='color:{COLOR_MUTED};margin-top:0.5rem;font-size:1rem'>
+            <p style='color:{STATIC_FOG};margin-top:0.5rem;font-size:1rem;
+                      font-family:IBM Plex Sans,sans-serif'>
                 Real-time FAERS signal detection | WHO-UMC criteria | ICH E2A deadlines | spaCy NER
             </p>
         </div>
@@ -354,8 +231,8 @@ def render_landing():
     ]
     for col, (title, body) in zip(cols, cards):
         col.markdown(
-            f"<div class='pv-card'><strong>{title}</strong>"
-            f"<p style='color:{COLOR_MUTED};font-size:0.85rem;margin-top:0.4rem'>{body}</p></div>",
+            f"<div class='station-panel'><strong style='color:{PHOSPHOR}'>{title}</strong>"
+            f"<p style='color:{STATIC_FOG};font-size:0.85rem;margin-top:0.4rem'>{body}</p></div>",
             unsafe_allow_html=True,
         )
 
@@ -367,7 +244,7 @@ def render_landing():
 
     st.write("")
     st.markdown(
-        f"<p style='text-align:center;color:{COLOR_MUTED};font-size:0.78rem'>"
+        f"<p style='text-align:center;color:{STATIC_FOG};font-size:0.78rem'>"
         "Built by <strong>Aruri Gowtham</strong> | Pharm.D + PvPI ADR Experience | Data Science 9.0 CGPA"
         "</p>",
         unsafe_allow_html=True,
@@ -754,61 +631,35 @@ def main():
     validator = InputValidator()
     formatter = OutputFormatter()
 
-    st.sidebar.markdown(f"## {APP_NAME}")
-    st.sidebar.caption(APP_SUBTITLE)
-    st.sidebar.warning(
-        "**Clinical Decision Support Only**\n\n"
-        "PV-Trace outputs are generated from FAERS voluntary reports and are **not** "
-        "a substitute for qualified pharmacovigilance physician review. All signals, "
-        "narratives, and E2B exports require medical review before regulatory submission. "
-        "FAERS data reflects reports, not confirmed causality.",
-        icon=None,
-    )
-    st.sidebar.divider()
-
-    with st.sidebar.form(key="drug_search_form"):
-        drug_name = st.text_input(
-            "Drug name",
-            key="drug_input",
-            placeholder="e.g. ibuprofen, warfarin",
-        )
-        analyze = st.form_submit_button("Analyze Drug", type="primary", use_container_width=True)
-
-    st.sidebar.divider()
-    st.sidebar.markdown(
-        f"""
-<div style='font-size:0.8rem;color:{COLOR_MUTED}'>
-<strong style='color:{COLOR_TEXT}'>Signal Criteria</strong><br>
-WHO-UMC / Evans<br><br>
-<span style='color:{COLOR_PRIMARY}'>PRR >= {PRR_THRESHOLD:.1f}</span> &nbsp;
-<span style='color:{COLOR_PRIMARY}'>Chi2 >= {CHI2_THRESHOLD:.1f}</span> &nbsp;
-<span style='color:{COLOR_PRIMARY}'>n >= {MIN_CASE_COUNT}</span>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-    st.sidebar.divider()
-    st.sidebar.markdown(
-        f"""
-<div style='font-size:0.75rem;color:{COLOR_MUTED}'>
-openFDA FAERS live<br>
-WHO-UMC signal model<br>
-ICH E2A deadline engine<br>
-spaCy en_core_web_sm<br>
-ICH E2B(R3) XML export
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-    st.sidebar.divider()
-    st.sidebar.caption("Data: FDA FAERS | Built by Aruri Gowtham")
-
     if "results" not in st.session_state:
         st.session_state.results = None
     if "last_drug" not in st.session_state:
         st.session_state.last_drug = None
+
+    active = [False] * 7
+    if st.session_state.results:
+        active[0] = True
+        active[1] = bool(
+            not st.session_state.results["signals_df"].empty
+            and st.session_state.results["signals_df"]["is_signal"].any()
+        )
+        active[2] = bool(st.session_state.results["narratives"])
+        active[3] = not st.session_state.results["deadlines_df"].empty
+        active[5] = bool(st.session_state.results["e2b_exports"])
+
+    st.markdown(header_bar(active), unsafe_allow_html=True)
+    st.markdown(clinical_warning_banner(), unsafe_allow_html=True)
+
+    header_cols = st.columns([4, 1])
+    with header_cols[0]:
+        drug_name = st.text_input(
+            "Drug name",
+            key="drug_input",
+            placeholder="e.g. ibuprofen, warfarin",
+            label_visibility="collapsed",
+        )
+    with header_cols[1]:
+        analyze = st.button("Analyze Drug", type="primary", use_container_width=True)
 
     should_run = analyze or st.session_state.pop("run_requested", False)
     if should_run:
@@ -836,9 +687,15 @@ ICH E2B(R3) XML export
             render_ner_tab()
         return
 
-    tabs = st.tabs(
-        ["Signal Detection", "Clinical Signals", "ICSR Narratives", "Deadlines", "NER Extractor", "E2B Export", "Audit Trail"]
-    )
+    tabs = st.tabs([
+        "The Radar",
+        "Decode",
+        "Transcript",
+        "Countdown",
+        "Decoder",
+        "Packet",
+        "Flight Recorder",
+    ])
     with tabs[0]:
         render_signal_tab(st.session_state.results, formatter, st.session_state.last_drug)
     with tabs[1]:
