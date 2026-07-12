@@ -9,8 +9,7 @@ from audit.logger import AuditLogger, _GENESIS_HASH
 def test_log_step_writes_entry():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.jsonl"
-        logger = AuditLogger("test_drug", run_id="test-run")
-        logger.log_path = path
+        logger = AuditLogger("test_drug", run_id="test-run", log_path=str(path))
         logger.log_step("ingestion", "completed", {"cases": 10})
         lines = path.read_text().strip().splitlines()
         assert len(lines) == 1
@@ -24,8 +23,7 @@ def test_log_step_writes_entry():
 def test_hash_chain_links_entries():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.jsonl"
-        logger = AuditLogger("test_drug", run_id="test-run")
-        logger.log_path = path
+        logger = AuditLogger("test_drug", run_id="test-run", log_path=str(path))
         logger.log_step("step1", "started", {})
         logger.log_step("step2", "completed", {})
         lines = path.read_text().strip().splitlines()
@@ -38,8 +36,7 @@ def test_hash_chain_links_entries():
 def test_verify_chain_valid():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.jsonl"
-        logger = AuditLogger("test_drug", run_id="test-run")
-        logger.log_path = path
+        logger = AuditLogger("test_drug", run_id="test-run", log_path=str(path))
         logger.log_step("s1", "ok", {})
         logger.log_step("s2", "ok", {})
         result = AuditLogger.verify_chain(str(path))
@@ -51,8 +48,7 @@ def test_verify_chain_valid():
 def test_verify_chain_detects_tampering():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.jsonl"
-        logger = AuditLogger("test_drug", run_id="test-run")
-        logger.log_path = path
+        logger = AuditLogger("test_drug", run_id="test-run", log_path=str(path))
         logger.log_step("s1", "ok", {})
         logger.log_step("s2", "ok", {})
         lines = path.read_text().strip().splitlines()
@@ -68,8 +64,7 @@ def test_tamper_entry1_breaks_chain_for_entry2():
     """Tampering entry1 must be caught at entry1 (hash mismatch), not silently pass."""
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.jsonl"
-        logger = AuditLogger("test_drug", run_id="test-run")
-        logger.log_path = path
+        logger = AuditLogger("test_drug", run_id="test-run", log_path=str(path))
         logger.log_step("s1", "ok", {})
         logger.log_step("s2", "ok", {})
         lines = path.read_text().strip().splitlines()
@@ -86,8 +81,7 @@ def test_verify_after_tamper_and_restore():
     """Tamper then restore original content — verify_chain must pass again."""
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.jsonl"
-        logger = AuditLogger("test_drug", run_id="test-run")
-        logger.log_path = path
+        logger = AuditLogger("test_drug", run_id="test-run", log_path=str(path))
         logger.log_step("s1", "ok", {})
         logger.log_step("s2", "ok", {})
         clean_content = path.read_text(encoding="utf-8")
@@ -117,8 +111,7 @@ def test_prev_hash_material_to_hash_computation():
 
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "test.jsonl"
-        logger = AuditLogger("test_drug", run_id="test-run")
-        logger.log_path = path
+        logger = AuditLogger("test_drug", run_id="test-run", log_path=str(path))
         logger.log_step("s1", "ok", {})
         lines = path.read_text().strip().splitlines()
         entry = json.loads(lines[0])

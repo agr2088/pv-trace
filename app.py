@@ -35,6 +35,15 @@ from dashboard.theme import (
     metric_card,
     noise_floor_ring_label,
     sweep_overlay_html,
+    decode_strip_html,
+    transcript_frame,
+    expectedness_banner,
+    reactionoutcome_disclosure,
+    extraction_mode_badge,
+    flight_recorder_tile,
+    status_led,
+    countdown_gauge,
+    inline_entity_highlight,
     PHOSPHOR,
     STATIC_FOG,
     AMBER_TRACE,
@@ -44,7 +53,6 @@ from dashboard.theme import (
     GRID_LINE,
     FONT_MONO,
     SIGNAL_COLOR,
-    inline_entity_highlight,
 )
 from pipeline.deadline_calculator import DeadlineCalculator
 from pipeline.e2b_exporter import E2BExporter
@@ -97,7 +105,8 @@ def fetch_background_counts(event_pts_json: str) -> dict:
 def run_pipeline(drug_name: str) -> dict:
     logger = AuditLogger(drug_name)
     status = st.status(f"Running PV-Trace analysis for {drug_name}", expanded=True)
-    progress = st.progress(0, text="Starting analysis...")
+    progress_placeholder = st.empty()
+    progress = progress_placeholder.progress(0, text="Starting analysis...")
 
     try:
         status.write("Connecting to openFDA FAERS and fetching adverse event reports...")
@@ -161,6 +170,7 @@ def run_pipeline(drug_name: str) -> dict:
         e2b_exports = E2BExporter().export_batch(cases_for_xml)
         logger.log_step("e2b_export", "completed", {"exports": len(e2b_exports)})
         progress.progress(100, text="Analysis complete")
+        progress_placeholder.empty()
 
         summary = logger.get_run_summary()
         status.update(label=f"PV-Trace analysis complete for {drug_name}", state="complete", expanded=False)
@@ -179,6 +189,7 @@ def run_pipeline(drug_name: str) -> dict:
             },
         }
     except Exception:
+        progress_placeholder.empty()
         status.update(label=f"PV-Trace analysis failed for {drug_name}", state="error", expanded=True)
         raise
 
@@ -281,7 +292,7 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
     top_metrics = st.columns(4)
     top_metrics[0].metric("Total unique cases", events_df["primaryid"].nunique())
     top_metrics[1].metric("Signals detected", signal_count)
-    top_metrics[2].metric("Highest PRR", f"{highest_prr:.2f}" if pd.notna(highest_prr) else "N/A")
+    top_metrics[2].metric("Highest PRR (may not meet criteria)", f"{highest_prr:.2f}" if pd.notna(highest_prr) else "N/A")
     top_metrics[3].metric("Events analyzed", len(signals_df))
 
     bg = results.get("bg_metadata")
@@ -341,7 +352,7 @@ def render_signal_tab(results: dict, formatter: OutputFormatter, drug_name: str)
         '<div style="position:relative;">',
         unsafe_allow_html=True,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.markdown(sweep_overlay_html(), unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -527,8 +538,6 @@ def render_deadline_tab(results: dict, formatter: OutputFormatter):
 
     st.metric("Deadline status", f"as of {pd.Timestamp.today().date()}")
 
-    from dashboard.theme import countdown_gauge
-
     max_total = int(deadlines_df["deadline_days"].max()) if "deadline_days" in deadlines_df.columns else 90
     gauge_rows = deadlines_df.head(12)
     n_gauges = len(gauge_rows)
@@ -537,14 +546,14 @@ def render_deadline_tab(results: dict, formatter: OutputFormatter):
     for start in range(0, n_gauges, cols_per_row):
         row_items = gauge_rows.iloc[start:start + cols_per_row]
         cols = st.columns(cols_per_row)
-        for col, (_, row) in zip(cols, row_items.iterrows()):
+        for gi, (col, (_, row)) in enumerate(zip(cols, row_items.iterrows()), start=start):
             case_id = str(row.get("primaryid", "?"))
             event = str(row.get("event_pt", "?"))[:25]
             days_rem = int(row.get("days_remaining", 0))
             deadline_d = int(row.get("deadline_days", 90))
             fig = countdown_gauge(days_rem, deadline_d, case_id)
             with col:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch", key=f"gauge_{gi}")
                 st.markdown(
                     f'<div style="text-align:center;font-family:\'{FONT_MONO}\',monospace;'
                     f'font-size:0.7rem;color:{STATIC_FOG};">'

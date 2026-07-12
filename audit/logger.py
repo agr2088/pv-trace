@@ -15,11 +15,11 @@ _GENESIS_HASH = "0" * 64
 class AuditLogger:
     """Append-only run logger for traceable pharmacovigilance workflow steps."""
 
-    def __init__(self, drug_name: str, run_id: str = None):
+    def __init__(self, drug_name: str, run_id: str = None, log_path: str = None):
         self.drug_name = drug_name
         self.run_id = run_id or str(uuid.uuid4())
         self.start_time = datetime.now(timezone.utc)
-        self.log_path = Path(AUDIT_LOG_PATH)
+        self.log_path = Path(log_path or AUDIT_LOG_PATH)
         self._prev_hash = self._load_last_hash()
         os.makedirs(self.log_path.parent, exist_ok=True)
 

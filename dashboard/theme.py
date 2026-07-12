@@ -525,10 +525,8 @@ def header_led_strip(station_names: list[str], active: list[bool]) -> str:
         css_class = "led led-active" if is_active else "led led-dim"
         dots.append(f'<span class="{css_class}" title="{name}"></span>')
     return (
-        '<div class="led-strip">'
+        '<div class="led-strip" style="display:flex;gap:6px;align-items:center;">'
         + " ".join(dots)
-        + f'<span style="font-family:\'{FONT_MONO}\',monospace;font-size:0.7rem;'
-        f'color:{STATIC_FOG};margin-left:4px">{" ".join(chr(9679) * len(station_names))}</span>'
         + "</div>"
     )
 
@@ -546,10 +544,10 @@ def header_bar(active_stations: list[bool]) -> str:
     led_html += "".join(leds)
     led_html += "</div>"
     return f"""
-    <div style="display:flex;align-items:center;gap:12px;padding:0.8rem 0 0.4rem 0;">
+    <div style="display:flex;align-items:center;gap:16px;padding:1.0rem 0 0.6rem 0;min-height:3rem;">
         {led_html}
         <span style="font-family:'{FONT_DISPLAY}',sans-serif;font-weight:700;font-size:1.3rem;
-                      color:#e5e7eb;letter-spacing:0.04em;">
+                      color:#e5e7eb;letter-spacing:0.04em;white-space:nowrap;">
             PV-TRACE <span style="color:{STATIC_FOG};font-weight:400;font-size:0.85rem;">
             — SIGNAL STATION</span>
         </span>
